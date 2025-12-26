@@ -162,7 +162,8 @@ function displayWeather(weatherData) {
     weather: [{ main, description, icon }],
     wind: { speed },
     visibility,
-    dt
+    dt,
+    coord: { lat, lon }
   } = weatherData;
 
   // Update temperature and main weather info
@@ -186,6 +187,9 @@ function displayWeather(weatherData) {
   // Show results container
   document.getElementById('resultsContainer').classList.remove('hidden');
 
+  // Fetch and display 5-day forecast
+  fetchAndDisplayForecast(lat, lon);
+
   // Add to favorites for quick access
   addToFavorites(name, temp);
 }
@@ -195,6 +199,96 @@ function displayWeather(weatherData) {
  */
 function clearWeatherDisplay() {
   document.getElementById('resultsContainer').classList.add('hidden');
+  document.getElementById('forecastSection').classList.add('hidden');
+}
+
+/**
+ * Fetches and displays 5-day forecast for given coordinates
+ * @param {number} lat - Latitude coordinate
+ * @param {number} lon - Longitude coordinate
+ */
+async function fetchAndDisplayForecast(lat, lon) {
+  try {
+    const forecastData = await fetchWeatherForecast(lat, lon);
+    displayForecast(forecastData);
+  } catch (error) {
+    console.error('Error fetching forecast:', error);
+    // Don't show error to user as forecast is secondary information
+  }
+}
+
+/**
+ * Displays 5-day forecast in the DOM
+ * Groups forecast data by day and shows key information
+ * @param {Object} forecastData - Forecast data from API
+ */
+function displayForecast(forecastData) {
+  const forecastList = forecastData.list;
+  const forecastContainer = document.getElementById('forecastContainer');
+  const forecastSection = document.getElementById('forecastSection');
+
+  // Group forecast data by day (one entry per day at noon)
+  const dailyForecasts = {};
+  forecastList.forEach((item) => {
+    const date = new Date(item.dt * 1000);
+    const dayKey = date.toLocaleDateString('en-US');
+
+    // Take the first occurrence of each day or update if current time is closer to noon
+    if (!dailyForecasts[dayKey]) {
+      dailyForecasts[dayKey] = item;
+    } else {
+      // Prefer data closer to noon (12:00)
+      const currentHour = new Date(dailyForecasts[dayKey].dt * 1000).getHours();
+      const newHour = date.getHours();
+      if (Math.abs(newHour - 12) < Math.abs(currentHour - 12)) {
+        dailyForecasts[dayKey] = item;
+      }
+    }
+  });
+
+  // Get only the next 5 days
+  const next5Days = Object.values(dailyForecasts).slice(0, 5);
+
+  // Clear previous forecast
+  forecastContainer.innerHTML = '';
+
+  // Create forecast cards
+  next5Days.forEach((day) => {
+    const date = new Date(day.dt * 1000);
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+    const dayDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const temp = Math.round(day.main.temp);
+    const tempMin = Math.round(day.main.temp_min);
+    const tempMax = Math.round(day.main.temp_max);
+    const description = day.weather[0].main;
+    const icon = day.weather[0].icon;
+    const humidity = day.main.humidity;
+    const windSpeed = day.wind.speed;
+
+    const forecastCard = document.createElement('div');
+    forecastCard.className = 'forecast-card';
+    forecastCard.innerHTML = `
+      <div class="forecast-day">${dayName}</div>
+      <div class="forecast-date">${dayDate}</div>
+      <div class="forecast-icon">
+        <img src="https://openweathermap.org/img/wn/${icon}@2x.png" alt="${description}" />
+      </div>
+      <div class="forecast-description">${description}</div>
+      <div class="forecast-temps">
+        <div class="temp-max">${tempMax}°</div>
+        <div class="temp-min">${tempMin}°</div>
+      </div>
+      <div class="forecast-details">
+        <div class="forecast-detail-item">💧 ${humidity}%</div>
+        <div class="forecast-detail-item">💨 ${windSpeed.toFixed(1)} m/s</div>
+      </div>
+    `;
+
+    forecastContainer.appendChild(forecastCard);
+  });
+
+  // Show forecast section
+  forecastSection.classList.remove('hidden');
 }
 
 /**
